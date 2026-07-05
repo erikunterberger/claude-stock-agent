@@ -218,10 +218,11 @@ def _build_payload(market_snapshot: dict, news_bundle: dict,
 
 
 def build_analysis(market_snapshot: dict, news_bundle: dict,
-                   scorecard: list[dict], history: list[dict]) -> tuple[str, list[dict]]:
+                   scorecard: list[dict], history: list[dict]
+                   ) -> tuple[str, list[dict], list[dict]]:
     """Runs the full multi-stage pipeline.
 
-    Returns (report_markdown, extracted_picks).
+    Returns (report_markdown, extracted_picks, candidate_fundamentals).
     """
     client = _client()
     payload = _build_payload(market_snapshot, news_bundle, scorecard, history)
@@ -261,4 +262,4 @@ def build_analysis(market_snapshot: dict, news_bundle: dict,
     )
     picks = [p for p in _parse_json_array(picks_text) if isinstance(p, dict) and p.get("ticker")]
 
-    return report, picks
+    return report, picks, fundamentals

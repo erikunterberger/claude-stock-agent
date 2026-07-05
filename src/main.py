@@ -11,7 +11,7 @@ from datetime import date
 from src import config
 from src.analysis import analyzer, ledger
 from src.fetchers import market_data, news_fetcher
-from src.report import emailer, obsidian, report_builder
+from src.report import dashboard, emailer, obsidian, report_builder
 
 
 def run(send_email: bool) -> None:
@@ -30,7 +30,7 @@ def run(send_email: bool) -> None:
     history = obsidian.load_recent_reports(exclude_date=run_date)
 
     print("Running multi-stage analysis (4 Gemini calls, may take a few minutes)...")
-    narrative, picks = analyzer.build_analysis(
+    narrative, picks, fundamentals = analyzer.build_analysis(
         market_snapshot, news_bundle, scorecard, history
     )
 
@@ -45,6 +45,11 @@ def run(send_email: bool) -> None:
         print(f"Ledger: recorded {len(picks)} picks -> {ledger.LEDGER_PATH}")
     else:
         print("Ledger: no picks extracted this run.")
+
+    dash_path = dashboard.update_dashboard(
+        market_snapshot, news_bundle, narrative, picks, fundamentals, scorecard, run_date
+    )
+    print(f"Dashboard: data updated -> {dash_path}")
 
     vault_path = obsidian.save_to_vault(markdown_text, run_date)
     if vault_path:
