@@ -61,7 +61,6 @@
 
   /* ---------- header ---------- */
   $("meta-line").textContent = `Report date: ${D.run_date} · Generated ${D.generated_at}`;
-  $("header-networth").textContent = money(D.portfolio.net_worth);
 
   /* ---------- tabs ---------- */
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -73,77 +72,111 @@
     });
   });
 
-  /* ---------- portfolio ---------- */
-  const P = D.portfolio;
-  const hist = P.history || [];
-  let histChange = null;
-  if (hist.length >= 2) {
-    const first = hist[0].net_worth, last = hist[hist.length - 1].net_worth;
-    if (first) histChange = ((last - first) / first) * 100;
-  }
-  $("portfolio-stats").innerHTML = [
-    { k: "Net Worth", v: money(P.net_worth) },
-    { k: "Cash", v: money(P.cash_total) },
-    { k: "Invested (Holdings)", v: money(P.holdings_value) },
-    { k: "Change Since Tracking Began", v: pct(histChange), cls: pctClass(histChange) },
-  ]
-    .map((s) => `<div class="stat"><div class="k">${s.k}</div><div class="v ${s.cls || ""}">${s.v}</div></div>`)
-    .join("");
-
+  /* ---------- portfolio (rendered as a function so Refresh can re-call it) ---------- */
   const palette = ["#4ade80", "#60a5fa", "#fbbf24", "#f87171", "#b8a5f5", "#34d399", "#f472b6", "#93c5fd"];
-  new Chart($("allocation-chart"), {
-    type: "doughnut",
-    data: {
-      labels: P.allocation.map((a) => a.label),
-      datasets: [{ data: P.allocation.map((a) => a.value), backgroundColor: palette, borderColor: "#161b22", borderWidth: 2 }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "right", labels: { color: "#e6edf3", padding: 14 } },
-        tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${money(ctx.parsed)}` } },
+  let allocationChart = null;
+  let networthChart = null;
+
+  function renderPortfolio(P) {
+    $("header-networth").textContent = money(P.net_worth);
+
+    const hist = P.history || [];
+    let histChange = null;
+    if (hist.length >= 2) {
+      const first = hist[0].net_worth, last = hist[hist.length - 1].net_worth;
+      if (first) histChange = ((last - first) / first) * 100;
+    }
+    $("portfolio-stats").innerHTML = [
+      { k: "Net Worth", v: money(P.net_worth) },
+      { k: "Cash", v: money(P.cash_total) },
+      { k: "Invested (Holdings)", v: money(P.holdings_value) },
+      { k: "Change Since Tracking Began", v: pct(histChange), cls: pctClass(histChange) },
+    ]
+      .map((s) => `<div class="stat"><div class="k">${s.k}</div><div class="v ${s.cls || ""}">${s.v}</div></div>`)
+      .join("");
+
+    if (allocationChart) allocationChart.destroy();
+    allocationChart = new Chart($("allocation-chart"), {
+      type: "doughnut",
+      data: {
+        labels: P.allocation.map((a) => a.label),
+        datasets: [{ data: P.allocation.map((a) => a.value), backgroundColor: palette, borderColor: "#161b22", borderWidth: 2 }],
       },
-    },
-  });
-
-  new Chart($("networth-chart"), {
-    type: "line",
-    data: {
-      labels: hist.map((h) => h.date),
-      datasets: [{
-        data: hist.map((h) => h.net_worth),
-        borderColor: "#4ade80",
-        backgroundColor: "rgba(74, 222, 128, 0.12)",
-        fill: true,
-        tension: 0.25,
-        pointRadius: 3,
-      }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => money(ctx.parsed.y) } } },
-      scales: {
-        x: { ticks: { color: "#8b98a9" }, grid: { color: "#2a3242" } },
-        y: { ticks: { color: "#8b98a9", callback: (v) => "$" + Number(v).toLocaleString() }, grid: { color: "#2a3242" } },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right", labels: { color: "#e6edf3", padding: 14 } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${money(ctx.parsed)}` } },
+        },
       },
-    },
+    });
+
+    if (networthChart) networthChart.destroy();
+    networthChart = new Chart($("networth-chart"), {
+      type: "line",
+      data: {
+        labels: hist.map((h) => h.date),
+        datasets: [{
+          data: hist.map((h) => h.net_worth),
+          borderColor: "#4ade80",
+          backgroundColor: "rgba(74, 222, 128, 0.12)",
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+        }],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => money(ctx.parsed.y) } } },
+        scales: {
+          x: { ticks: { color: "#8b98a9" }, grid: { color: "#2a3242" } },
+          y: { ticks: { color: "#8b98a9", callback: (v) => "$" + Number(v).toLocaleString() }, grid: { color: "#2a3242" } },
+        },
+      },
+    });
+
+    $("holdings-table").innerHTML = P.holdings.length
+      ? table(
+          ["Ticker", "Bucket", "Shares", "Cost Basis", "Price Now", "Value", "Gain/Loss"],
+          P.holdings.map((h) => [
+            `<b>${esc(h.ticker)}</b>`, esc(h.bucket || "—"), h.shares, money(h.cost_basis_per_share),
+            money(h.price_now), money(h.value_now),
+            `<span class="${pctClass(h.gain_pct)}">${pct(h.gain_pct)}</span>`,
+          ])
+        )
+      : '<p class="empty">No stock positions yet — everything is in cash. Your first buys will show up here.</p>';
+
+    $("accounts-table").innerHTML = table(
+      ["Account", "Cash"],
+      (P.accounts || []).map((a) => [esc(a.name), money(a.cash)])
+    );
+  }
+
+  renderPortfolio(D.portfolio);
+
+  /* ---------- refresh button (needs dashboard_server.py running) ---------- */
+  const refreshBtn = $("refresh-btn");
+  const refreshStatus = $("refresh-status");
+  refreshBtn.addEventListener("click", async () => {
+    refreshBtn.disabled = true;
+    refreshStatus.className = "refresh-status";
+    refreshStatus.textContent = "Refreshing prices…";
+    try {
+      const res = await fetch("/api/refresh-prices");
+      if (!res.ok) throw new Error((await res.json()).error || "Server error");
+      const portfolio = await res.json();
+      D.portfolio = portfolio;
+      renderPortfolio(portfolio);
+      refreshStatus.className = "refresh-status ok";
+      refreshStatus.textContent = "Updated " + new Date().toLocaleTimeString();
+    } catch (err) {
+      refreshStatus.className = "refresh-status error";
+      refreshStatus.textContent =
+        "Couldn't refresh — open this page via start_dashboard.bat instead of double-clicking index.html for the Refresh button to work.";
+    } finally {
+      refreshBtn.disabled = false;
+    }
   });
-
-  $("holdings-table").innerHTML = P.holdings.length
-    ? table(
-        ["Ticker", "Bucket", "Shares", "Cost Basis", "Price Now", "Value", "Gain/Loss"],
-        P.holdings.map((h) => [
-          `<b>${esc(h.ticker)}</b>`, esc(h.bucket || "—"), h.shares, money(h.cost_basis_per_share),
-          money(h.price_now), money(h.value_now),
-          `<span class="${pctClass(h.gain_pct)}">${pct(h.gain_pct)}</span>`,
-        ])
-      )
-    : '<p class="empty">No stock positions yet — everything is in cash. Your first buys will show up here.</p>';
-
-  $("accounts-table").innerHTML = table(
-    ["Account", "Cash"],
-    (P.accounts || []).map((a) => [esc(a.name), money(a.cash)])
-  );
 
   /* ---------- news ---------- */
   $("risks-content").innerHTML = mdRender(mdSection("Risks & What to Watch"));

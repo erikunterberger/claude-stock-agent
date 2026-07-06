@@ -2,8 +2,9 @@
 
 A daily agent that pulls market movers + financial news, runs a structured
 (McKinsey-style) analysis via Google Gemini (free tier), and produces a
-Markdown + PDF report — optionally emailed to you. Run manually whenever you
-want a report; nothing is scheduled automatically.
+Markdown + PDF report plus a local dashboard — optionally emailed to you.
+Runs automatically every weekday morning via Windows Task Scheduler
+(`run_daily.bat`), or manually anytime with `python -m src.main`.
 
 All three data/analysis providers below have genuine free tiers (no credit
 card needed to get started). NewsAPI's free tier is officially scoped to
@@ -46,7 +47,25 @@ python -m src.main            # saves reports/<date>-report.md and .pdf
 python -m src.main --email    # also emails the PDF
 ```
 
-Reports land in `reports/`.
+Reports land in `reports/`. The dashboard's data (`dashboard/data.js`) is
+regenerated on every run too — see below for how to view it.
+
+## Dashboard
+
+Open it two ways:
+
+- **Just viewing**: double-click `dashboard/index.html` — works offline,
+  shows whatever the last run generated.
+- **Viewing + the Refresh Prices button**: run `start_dashboard.bat`
+  (or `venv\Scripts\python.exe dashboard_server.py`) and open
+  `http://localhost:8765`. The Refresh button re-prices your current
+  holdings only (no LLM calls, ~1 API call per position) without waiting
+  for the next full daily run. It only works through this server — a plain
+  `file://` page has no server to call, so the button will show an error.
+
+Your actual holdings live in `profile/portfolio.md` (gitignored, local
+only) — the dashboard's portfolio page, allocation pie chart, and net
+worth history are all computed from that file plus live quotes.
 
 ## How it works
 
@@ -70,13 +89,23 @@ Reports land in `reports/`.
    into the next run for continuity.
 6. `src/report/report_builder.py` — assembles narrative + raw-data appendix
    into Markdown, renders PDF.
-7. `src/report/emailer.py` — optionally emails the PDF via SMTP.
+7. `src/report/dashboard.py` — prices your actual holdings (from
+   `profile/portfolio.md`), updates net-worth history, and writes
+   `dashboard/data.js` for the local site.
+8. `src/report/emailer.py` — optionally emails the PDF via SMTP.
+9. `dashboard_server.py` — optional local server (static files +
+   `/api/refresh-prices`) for the dashboard's manual refresh button.
+
+## Automation
+
+`run_daily.bat` runs the full pipeline; a Windows Task Scheduler job
+("Stock Agent Daily") fires it every weekday at 7:00 AM with
+`StartWhenAvailable` and `WakeToRun` enabled, so it catches up if your PC
+was asleep at trigger time (it can't wake from a full shutdown, only sleep).
+Logs land in `reports/run_log.txt`.
 
 ## Extending
 
-- **Automate it**: once you're happy with report quality, wire
-  `python -m src.main --email` into Windows Task Scheduler to run every
-  morning before market open.
 - **Swap data providers**: the fetchers are isolated modules — swap in
   Finnhub, Polygon.io, Alpha Vantage, etc. without touching the analyzer or
   report builder.

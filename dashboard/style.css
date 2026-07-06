@@ -75,6 +75,23 @@ main { flex: 1; padding: 24px 28px; max-width: 1280px; width: 100%; margin: 0 au
 .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
 .risk-card { border-left: 3px solid var(--amber); }
 
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.card-head h2 { margin-bottom: 0; }
+.btn-refresh {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+.btn-refresh:disabled { opacity: 0.5; cursor: default; }
+.refresh-status { font-size: 12px; color: var(--muted); margin-bottom: 10px; min-height: 16px; }
+.refresh-status.error { color: var(--red); }
+.refresh-status.ok { color: var(--accent); }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
 

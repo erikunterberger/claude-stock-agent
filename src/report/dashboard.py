@@ -133,6 +133,35 @@ def _condense_articles(articles: list[dict], limit: int = 20) -> list[dict]:
     return out
 
 
+def refresh_prices_only() -> dict:
+    """Re-prices current holdings and patches just the portfolio section of
+    data.js, without touching news/suggested/overall or calling any LLM.
+    Used by the dashboard's manual "Refresh" button. Returns the fresh
+    portfolio dict (with history) for the caller to send back to the browser.
+    """
+    from datetime import date
+
+    portfolio = _compute_portfolio_state()
+    history = _update_history(portfolio["net_worth"], date.today().isoformat())
+    portfolio = {**portfolio, "history": history}
+
+    if DATA_JS_PATH.exists():
+        text = DATA_JS_PATH.read_text(encoding="utf-8")
+        prefix = "window.DASHBOARD_DATA = "
+        if text.startswith(prefix):
+            try:
+                data = json.loads(text[len(prefix):].rstrip().rstrip(";"))
+                data["portfolio"] = portfolio
+                DATA_JS_PATH.write_text(
+                    prefix + json.dumps(data, indent=2, default=str) + ";\n",
+                    encoding="utf-8",
+                )
+            except json.JSONDecodeError:
+                pass  # leave data.js untouched if it's ever malformed
+
+    return portfolio
+
+
 def update_dashboard(
     market_snapshot: dict,
     news_bundle: dict,
