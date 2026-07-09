@@ -128,8 +128,11 @@ problems, and keep every section heading exactly as-is.
 ticker but rewrite its rationale to what IS supportable, or move it to the \
 Speculative section with the uncertainty stated.
 
-Return ONLY the corrected report, full text, same Markdown structure. Do \
-not add commentary about what you changed.
+Do your fact-checking silently. Your response must contain NOTHING before \
+the report itself — no restating what you're checking, no listing search \
+results, no "now I'll write the final report" transition. The very first \
+characters of your response must be "## Executive Summary". Return ONLY \
+the corrected report, full text, same Markdown structure, nothing else.
 """
 
 EXTRACT_PROMPT = """\
@@ -161,6 +164,17 @@ def _generate(client, contents: str, system: str | None = None,
     if finish_reason is not None and str(finish_reason) not in ("STOP", "FinishReason.STOP"):
         print(f"Warning: response finished with '{finish_reason}' — output may be truncated.")
     return response.text or ""
+
+
+def _strip_preamble(text: str) -> str | None:
+    """Defensive cleanup: models occasionally narrate their fact-checking or
+    research process before the actual report. Slice from the first real
+    heading onward so leaked scratch text never ends up in the saved file.
+    Returns None if no heading is found at all (caller falls back)."""
+    match = re.search(r"^##\s+Executive Summary\s*$", text, re.IGNORECASE | re.MULTILINE)
+    if not match:
+        return None
+    return text[match.start():].strip()
 
 
 def _parse_json_array(text: str) -> list:
@@ -253,7 +267,7 @@ def build_analysis(market_snapshot: dict, news_bundle: dict,
         client,
         VERIFY_PROMPT + "\n\nDATA PAYLOAD:\n" + payload_json + "\n\nDRAFT REPORT:\n" + draft,
     )
-    report = verified if verified.strip().startswith("#") or "## Executive Summary" in verified else draft
+    report = _strip_preamble(verified) or _strip_preamble(draft) or draft
 
     print("  Stage 4/4: extracting picks for the ledger...")
     picks_text = _generate(
@@ -261,5 +275,7 @@ def build_analysis(market_snapshot: dict, news_bundle: dict,
         use_search=False, max_tokens=4096,
     )
     picks = [p for p in _parse_json_array(picks_text) if isinstance(p, dict) and p.get("ticker")]
+    if not picks:
+        print(f"  Warning: pick extraction returned nothing. Raw response (first 300 chars): {picks_text[:300]!r}")
 
     return report, picks, fundamentals
